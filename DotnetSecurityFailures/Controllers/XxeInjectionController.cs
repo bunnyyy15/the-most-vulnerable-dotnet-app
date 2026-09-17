@@ -44,7 +44,7 @@ public class XxeInjectionController : VulnerabilityDemoControllerBase
     [HttpPost("process-user")]
     public IActionResult ProcessUserXml([FromBody] XmlRequest request)
     {
-        LogDemoActivity("ProcessUserXml", "Processing XML with XmlResolver enabled (VULNERABLE)");
+        LogDemoActivity("ProcessUserXml", "Processing XML with secure settings");
 
         if (string.IsNullOrWhiteSpace(request.XmlContent))
         {
@@ -53,31 +53,36 @@ public class XxeInjectionController : VulnerabilityDemoControllerBase
 
         try
         {
-            // VULNERABLE: Explicitly enabling XmlResolver
+            // SECURE: Prohibit DTD processing and disable XmlResolver to prevent XXE attacks
+            var settings = new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit, // Prevent DTD parsing and entity resolution
+                XmlResolver = null // Disable external resource resolution
+            };
+
+            using var stringReader = new StringReader(request.XmlContent);
+            using var xmlReader = XmlReader.Create(stringReader, settings);
+
             var doc = new XmlDocument();
-            doc.XmlResolver = new XmlUrlResolver(); // DANGEROUS!
-            doc.LoadXml(request.XmlContent);
+            doc.Load(xmlReader);
 
             var name = doc.SelectSingleNode("//user/name")?.InnerText ?? "";
             var email = doc.SelectSingleNode("//user/email")?.InnerText ?? "";
             var bio = doc.SelectSingleNode("//user/bio")?.InnerText ?? "";
-
-            // Check if XXE was exploited (file content in name field)
-            if (!string.IsNullOrEmpty(name) && (name.Contains("connection") || name.Contains("password") || name.Length > 100))
-            {
-                return Ok(new
-                {
-                    Success = false,
-                    Warning = $"XXE ATTACK SUCCESSFUL!\n\nFile contents extracted:\n{name}",
-                    ProcessedData = new { Name = name, Email = email, Bio = bio }
-                });
-            }
 
             return Ok(new
             {
                 Success = true,
                 Message = "XML processed successfully",
                 ProcessedData = new { Name = name, Email = email, Bio = bio }
+            });
+        }
+        catch (XmlException ex)
+        {
+            return BadRequest(new
+            {
+                Success = false,
+                Error = $"Invalid XML or DTD processing is not allowed: {ex.Message}"
             });
         }
         catch (Exception ex)
