@@ -227,3 +227,7 @@ Console.WriteLine("via SSRF vulnerability from the main application.");
 Console.WriteLine();
 
 app.Run();
+
+// Expose Program as a public partial class so that WebApplicationFactory<Program>
+// can reference it from the test project.
+public partial class Program { }
